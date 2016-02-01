@@ -34,5 +34,5 @@ class ChunksByName(MetaDataTool):
             new_meta_data['chunks_by_name'].setdefault(chunk_name, WeakList()).append(chunk)
 
 
-def xref_use():
+def xref_use(*args, **kwargs):
     return Toolchain([UsesIndex(), UsedByIndex(), ChunksByName()])

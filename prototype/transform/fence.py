@@ -1,5 +1,5 @@
 from ..lib import toolchain
 
 
-def fence():
+def fence(*args, **kwargs):
     return toolchain.Fence()

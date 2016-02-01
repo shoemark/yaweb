@@ -16,8 +16,8 @@ class MetaProcessor(SideEffectsTool):
             input = yaweb.tangle(chunk, meta_data)
             # FIXME: This is unversioned access and breaks reproducibility in
             # interactive mode
-            exec input in yaweb.__dict__
+            exec(input, yaweb.__dict__)
 
 
-def meta():
+def meta(*args, **kwargs):
     return Toolchain([xref_use(), Fence(), MetaProcessor(), Fence()])

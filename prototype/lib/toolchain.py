@@ -1,6 +1,7 @@
 from . import ast
 from .weaklist import WeakList
 
+from functools import reduce
 from weakref import WeakKeyDictionary
 import copy
 
@@ -155,13 +156,8 @@ class PopOnIteration(object):
 
     def __iter__(self):
         self.items.reverse()
-        return self
-
-    def next(self):
-        if self.items:
-            return self.items.pop()
-        else:
-            raise StopIteration()
+        while self.items:
+            yield self.items.pop()
 
 
 class Fence(object):

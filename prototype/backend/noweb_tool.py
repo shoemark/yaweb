@@ -4,11 +4,16 @@ from ..lib.textutils import splitlines
 
 
 class noweb_tool(SideEffectsTool):
-    def __init__(self, output):
+    def __init__(self, output=sys.stdout, tangle=False, *args, **kwargs):
         super(noweb_tool, self).__init__()
+
+        if isinstance(output, list) and output and isinstance(output[0], str):
+            output = open(output[0], 'w')
+
         self.source_file = None
         self.chunk_id = 0
         self.output = output
+        self.tangle = tangle
 
     def process_chunk(self, chunk, meta_data):
         self._format(chunk)
@@ -44,8 +49,13 @@ class noweb_tool(SideEffectsTool):
 
                 self.chunk_id += 1
 
+        elif ast.is_element_type(element, ast.QuotedText):
+                lines = splitlines(element.text)
+                text = '@quote\n@text %s\n@endquote\n' % '\n@nl\n@text '.join(lines)
+                self.output.write(text)
+
         elif ast.is_element_type(element, ast.Text):
-            if element.get('pretty_latex') is not None:
+            if element.get('pretty_latex') is not None and self.tangle is False:
                 lines = splitlines(element.get('pretty_latex'))
                 text = '@literal %s\n' % '\n@nl\n@literal '.join(lines)
                 self.output.write(text)

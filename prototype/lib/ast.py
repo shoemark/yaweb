@@ -1,4 +1,24 @@
+from .textutils import valid_python_ident
+
 from xml.etree import ElementTree as ElementTree
+
+
+# XXX: Current masterplan:
+#  - There are two kinds of nodes contained in chunks, [ContentNode]s and
+#    [AnnotationNode]s. A ContentNode contains textual data that may be
+#    modified by the toolchain. An AnnotatationNode contains meta data about
+#    the chunk or part of it. Nodes may be nested. For example, a text node may
+#    be contained within an annotation node. This indicates that a tool in the
+#    chain parsed the text node(s) contained in the annotation node and created
+#    the annotation out of them. A mapping from each node to its origin in the
+#    source web is preserved, as long as new nodes only wrap old nodes.
+#  - A helper class is introduced that eases creating new ContentTools.
+#    It helps to parse a chunk's content in the following way: First, a set of
+#    criteria is specified for nodes to process; second, a set of criteria is
+#    specified describing which nodes may be "opened up" to look for the nodes
+#    to process. Third, each uninterrupted sequence of matching nodes is fed to
+#    the processing function, which is to aggregate the nodes into as many new
+#    nodes as it sees fit. Nodes that had to be broken up are removed and lost.
 
 
 def is_element_type(element, element_type):
@@ -13,10 +33,8 @@ def clone(element):
     return eval(repr(element))
 
 
-# attribs may only contain string keys and string values and may only be
-# manipulated by ContentStages.
-# meta may contain arbitrary data (especially cross references) and may only be
-# manipulated by MetaAttribStages.
+# Attribs may only contain string keys and string values and may only be
+# manipulated by ContentTools.
 class SyntaxElement(ElementTree.Element):
     def __init__(self, attrib={}, **extra):
         text = ''
@@ -42,14 +60,14 @@ class SyntaxElement(ElementTree.Element):
         for child in children:
             self.append(child)
 
-        self.meta = {}
-
     def __repr__(self):
         for bad_attr in ['text', 'children']:
             if self.get(bad_attr):
-                self.set(bad_attr, None)
+                del self.attrib[bad_attr]
 
-        state_desc = ['%s=%s' % (str(k), repr(self.get(k))) for k in sorted(self.attrib.keys())]
+        attrib = [(k, self.get(k)) for k in sorted(self.attrib.keys())]
+        state_desc = ['%s=%r' % (str(k), v) for k, v in attrib if valid_python_ident(str(k))]
+        state_desc += ['attrib=%r' % dict([(str(k), repr(v)) for k, v in attrib if not valid_python_ident(str(k))])]
 
         if self.text:
             state_desc.append('text=%s' % repr(self.text))
@@ -86,6 +104,13 @@ class NaturalText(Text):
         self.tag = self.__class__.__name__
 
 
+class QuotedText(Text):
+    def __init__(self, attrib={}, **extra):
+        super(QuotedText, self).__init__(attrib, **extra)
+        self.tag = self.__class__.__name__
+
+
+# TODO: Code should inherit QuotedText?
 class Code(Text):
     def __init__(self, attrib={}, **extra):
         super(Code, self).__init__(attrib, **extra)

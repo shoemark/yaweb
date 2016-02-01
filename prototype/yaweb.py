@@ -1,29 +1,18 @@
 #! /usr/bin/env python
 
 # TODO:
-#   - chunk tags, specialized weaving
-#   - command presets
-#   - command error propagation, noweb file location back-resolution
-#   - mapping noweb file location <-> source code file location
-#   - caching/makefiles
-#   - multiline options, code options after name field
 #   - language option derivation
-#   - use namespaces for markup, filter, backend stages
 #   - registerable macros, to be expanded at stage execution time
-#
-# XXX:
-#  - factor out regular expressions, compile beforehand, use printf-like templates
-#  - only check the regular expression matches that are actually needed, not all at once
-#  - switch to global makers, tanglers, weavers lists and remove dependers arguments.
-#  - use `@' as escape char
-
-import imp
-import importlib
 
 from .lib import ast
 from .lib import toolchain
 #from .lib import toolchain_debug
+from .lib.args import parse_args
 from .transform.meta import meta
+
+import sys
+import imp
+import importlib
 
 
 def YawebState():
@@ -37,22 +26,55 @@ def YawebState():
 
 
 class Yaweb(object):
-    def __init__(self, frontend=[], transform=[], backend=[], **params):
+    def __init__(self, *args, **kwargs):
+        default_bootstrap = [
+            ('meta', [], {})
+        ]
+        bootstrap  = kwargs.setdefault('bootstrap', default_bootstrap)
+        del kwargs['bootstrap']
+
+        default_frontends = [] # TODO
+        frontend  = kwargs.setdefault('frontend', default_frontends)
+        del kwargs['frontend']
+
+        default_transforms = [
+            ('eval', [], {}),
+            ('tags', [], {}),
+            ('lex_code', [], {}),
+            ('pretty', [], {}),
+        ]
+        transform = kwargs.setdefault('transform', default_transforms)
+        del kwargs['transform']
+
+        default_backends = [] # TODO
+        backend = kwargs.setdefault('backend', default_backends)
+        del kwargs['backend']
+
+        self.bootstrap_tools = []
+        for bs in bootstrap:
+            self.bootstrap_tools.append(self._load_tool(bs, ['', 'transform'], args, kwargs))
+
         self.frontends = []
         for fe in frontend:
-            self.frontends.append(self._load_tool(fe, ['', 'frontend']))
+            self.frontends.append(self._load_tool(fe, ['', 'frontend'], args, kwargs))
 
         self.transforms = []
         for tf in transform:
-            self.transforms.append(self._load_tool(tf, ['', 'transform']))
+            self.transforms.append(self._load_tool(tf, ['', 'transform'], args, kwargs))
 
         self.backends = []
         for be in backend:
-            self.backends.append(self._load_tool(be, ['', 'backend']))
+            self.backends.append(self._load_tool(be, ['', 'backend'], args, kwargs))
 
-    def _load_tool(self, plugin_desc, parent_packages=[]):
+    def _load_tool(self, desc, parent_packages, g_args, g_kwargs):
         try:
-            name, args, kwargs = plugin_desc
+            name, l_args, l_kwargs = desc
+
+            args = l_args
+
+            kwargs = {}
+            kwargs.update(g_kwargs)
+            kwargs.update(l_kwargs)
 
             if '.' in name:
                 pkg_name, class_name = name.rsplit('.', 1)
@@ -64,29 +86,21 @@ class Yaweb(object):
                 '.'.join(parent_packages + [pkg_name]),
                 __package__
             )
-            return module.__dict__[class_name](*args, **kwargs)
+
+            return module.__dict__[class_name](**kwargs)
         finally:
                 pass
 
     def __call__(self):
-        # TODO: combined pipeline should be like this:
-        #   - create a list of main stages
-        #       - populate with the stages requested via command line
-        #   - if meta chunks are enabled:
-        #       - fixed-function pre-pass Pipeline that evaluates meta chunks
-        #       - buffer chunks before continuing
-        #       - allow meta chunks to manipulate list of main stages
-        #   - build the pipeline, feed it the buffered or generated chunks
-
         yaweb = YawebState()
         yaweb.load_tool = lambda desc, pkgs=[]: self._load_tool(desc, pkgs)
         yaweb.tools = self.transforms + self.backends
 
         meta_data_src = dict(yaweb=yaweb)
 
-        chunks_src = (chunk for fe in self.frontends for chunk in fe())
+        chunks_src = (chunk for fe in self.frontends for chunk in fe)
 
-        bootstrap_tools = meta()
+        bootstrap_tools = toolchain.Toolchain(self.bootstrap_tools)
         chunks_pre, meta_data_pre = bootstrap_tools.pipe(chunks_src, meta_data_src)
 
         main_tools = toolchain.Toolchain(meta_data_pre['yaweb'].tools)
@@ -103,7 +117,9 @@ class Yaweb(object):
 
 
 def main(argv):
-    raise RuntimeError('not implemented yet')
+    args, kwargs = parse_args(argv)
+    yaweb = Yaweb(*args, **kwargs)
+    yaweb()
 
 
 if __name__ == '__main__':

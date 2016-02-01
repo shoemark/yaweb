@@ -110,5 +110,5 @@ def _lex_pygments(lang, element):
     return result
 
 
-def lex_code():
+def lex_code(*args, **kwargs):
     return CodeLexer()

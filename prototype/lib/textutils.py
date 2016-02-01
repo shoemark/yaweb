@@ -38,3 +38,7 @@ def escape_chars(escape_char, chars_to_escape, text):
         else:
             return escape_sequence.group(0)
     return re.sub('%s.' % escape_char, lambda match: escape(match), text)
+
+
+def valid_python_ident(string):
+    return re.match('^[_A-Za-z][_A-Za-z0-9]*$', string) is not None

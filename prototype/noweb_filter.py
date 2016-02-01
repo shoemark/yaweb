@@ -1,21 +1,20 @@
 import sys
 from .yaweb import Yaweb
+from .lib.args import parse_args
 
 
 def main(argv):
-    frontend = [
-        ('noweb_tool', [], dict(input=sys.stdin, recognize_chunk_opts=True))
+    args, kwargs = parse_args(argv)
+
+    kwargs['frontend'] = [
+        ('noweb_tool', [], {'extended_syntax': True})
     ]
-    transform = [
-        ('eval', [], dict()),
-        ('lex_code', [], dict()),
-        ('pretty', [], dict()),
-    ]
-    backend = [
-        ('noweb_tool', [], dict(output=sys.stdout))
+    kwargs['backend'] = [
+        ('noweb_tool', [], {})
     ]
 
-    Yaweb(frontend, transform, backend)()
+    yaweb = Yaweb(*args, **kwargs)
+    yaweb()
 
 
 if __name__ == '__main__':

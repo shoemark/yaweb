@@ -23,5 +23,5 @@ class PrettyPrinter(ContentTool):
             return chunk
 
 
-def pretty():
+def pretty(*args, **kwargs):
     return PrettyPrinter()

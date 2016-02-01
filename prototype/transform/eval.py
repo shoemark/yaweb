@@ -7,13 +7,16 @@ from ..lib.weaklist import WeakList
 import sys
 import os
 import os.path
-import re
 import subprocess
 import hashlib
 from weakref import WeakKeyDictionary
 from threading import Thread
 
-# TODO: rename to `exec'?
+
+# TODO:
+#   - rename to `exec'?
+#   - command error propagation, noweb file location back-resolution
+#   - mapping noweb file location <-> source code file location
 
 
 class ChunksByEvalSession(MetaDataTool):
@@ -41,9 +44,9 @@ class EvalTaskCreator(MetaDataTool):
         )
         self.presets = {
             'R':                    preset_R,
-            'R session':        preset_R_session,
+            'R session':            preset_R_session,
             'coq':                  preset_coq,
-            'coq session':      preset_coq_session,
+            'coq session':          preset_coq_session,
         }
         self.schemes = {
             'shell':                scheme_shell
@@ -80,13 +83,14 @@ class EvaluatorThread(Thread):
         self.task = task
         self.chunk = chunk
         self.meta_data = meta_data
+        self.result = None
 
     def run(self):
         self.result = self.task(self.chunk, self.meta_data)
 
 
 # TODO: consider session mode properly
-# TODO: Cache: hash-based, timestamp-based
+# TODO: Cache: timestamp-based?
 class EvalTaskRunner(MetaDataTool):
     def __init__(self):
         super(EvalTaskRunner, self).__init__(
@@ -190,21 +194,21 @@ class HashDbCache(object):
 
     def _cache_file_base(self, command, input):
         dirname = '_yaweb_eval'
-        command_hash = hashlib.sha256(command).hexdigest()
-        input_hash = hashlib.sha256(input).hexdigest()
+        command_hash = hashlib.sha256(command.encode()).hexdigest()
+        input_hash = hashlib.sha256(input.encode()).hexdigest()
         return '%s/%s/%s' % (dirname, command_hash, input_hash)
 
     def get(self, command, input):
         try:
             base = self._cache_file_base(command, input)
 
-            fret = open(base + '/ret', 'rb')
+            fret = open(base + '/ret', 'r')
             ret  = int(fret.read())
 
-            fout = open(base + '/out', 'rb')
+            fout = open(base + '/out', 'r')
             out  = fout.read()
 
-            ferr = open(base + '/err', 'rb')
+            ferr = open(base + '/err', 'r')
             err  = ferr.read()
 
             return ret, out, err
@@ -220,13 +224,13 @@ class HashDbCache(object):
 
             ret, out, err = value
 
-            fret = open(base + '/ret', 'wb')
+            fret = open(base + '/ret', 'w')
             fret.write(str(ret))
 
-            fout = open(base + '/out', 'wb')
+            fout = open(base + '/out', 'w')
             fout.write(out)
 
-            ferr = open(base + '/err', 'wb')
+            ferr = open(base + '/err', 'w')
             ferr.write(err)
         except Exception as x:
             sys.stderr.write(str(x) + '\n')
@@ -247,7 +251,10 @@ def shell_exec(command, input):
             stderr=subprocess.PIPE,
             shell=True
         )
-        out, err = process.communicate(input)
+        out, err = process.communicate(input.encode())
+
+        out = out.decode()
+        err = err.decode()
 
         ret = process.returncode
         if out is not '' and not out.endswith('\n'):
@@ -266,9 +273,13 @@ def shell_exec_session(command, preamble, input):
         ret_, out_, err_ = shell_exec(command, preamble)
         ret, out, err = shell_exec(command, preamble + os.linesep + input)
 
-        lines = splitlines(out)
-        out = os.linesep.join(lines[len(splitlines(out_)) - 2:])
-        pre = os.linesep.join(lines[:len(splitlines(out_)) - 2])
+        lines_ = splitlines(out_)
+        if len(lines_) > 1:
+            lines = splitlines(out)
+            out = os.linesep.join(lines[len(lines_) - 2:])
+            pre = os.linesep.join(lines[:len(lines_) - 2])
+        else:
+            pre = ''
     else:
         ret, out, err = shell_exec(command, input)
         pre = ''
@@ -320,6 +331,10 @@ def preset_coq_session(chunk, meta_data):
     COQ_PROMPT = '^(?P<prompt>[\w\s_]* < )(?P<text>.*)$'
 
     ins = iter(splitlines(input_t))
+    if '__next__' in dir(ins):  # python3
+        ins_next = lambda: ins.__next__()
+    else:                           # python2
+        ins_next = lambda: ins.next()
     outs = splitlines(out)
 
     if not preamble and len(outs) >= 4:
@@ -342,7 +357,7 @@ def preset_coq_session(chunk, meta_data):
         while Re.search(COQ_PROMPT, outs[i]):
             try:
                 outs[i:i + 1] = [
-                        Re.match.group('prompt') + ins.next(),
+                        Re.match.group('prompt') + ins_next(),
                         Re.match.group('text')
                 ]
                 i = i + 1
@@ -363,7 +378,7 @@ def scheme_shell(command, chunk, meta_data):
     return [source, result]
 
 
-def eval():
+def eval(*args, **kwargs):
     return Toolchain([
         ChunksByEvalSession(),
         EvalTaskCreator(),
