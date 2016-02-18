@@ -310,25 +310,12 @@ def _interactive_session(chunk, meta_data, command, prompt_re, echo_response_re,
     if not preamble and len(outs) >= banner_lines:
         # skip banner
         del outs[0:banner_lines]
-
     elif len(outs) >= 1:
-        # skip first prompt
+        # skip leading prompt
         if Re.search(prompt_re, outs[0]):
             outs[0] = Re.match.group('text')
             if outs[0] == '':
                 del outs[0]
-
-    # remove footer (blank line and prompt) to begin of this session
-    while len(outs) >= 1:
-        # skip last prompt
-        if outs[-1] == '':
-            del outs[-1]
-        elif Re.search(prompt_re, outs[-1]):
-            outs[-1] = Re.match.group('text')
-            if outs[-1] == '':
-                del outs[-1]
-        else:
-            break
 
     elements = []
 
@@ -350,7 +337,7 @@ def _interactive_session(chunk, meta_data, command, prompt_re, echo_response_re,
 
                 elements += [
                     ast.InteractivePrompt(text=prompt),
-                    ast.Code(text=input_ln + '\n')
+                    ast.Code(text='%s\n' % input_ln)
                 ]
 
                 if input_ln == leftover:
@@ -365,6 +352,17 @@ def _interactive_session(chunk, meta_data, command, prompt_re, echo_response_re,
             elements.append(ast.InteractiveResponse(text=(outs[0] + '\n')))
 
         del outs[0]
+
+    # remove trailing blank lines and prompts
+    while len(outs) >= 1:
+        if outs[-1] == '':
+            del outs[-1]
+        elif Re.search(prompt_re, outs[-1]):
+            outs[-1] = Re.match.group('text')
+            if outs[-1] == '':
+                del outs[-1]
+        else:
+            break
 
     source, result = output(chunk, meta_data, elements)
 
@@ -407,7 +405,7 @@ def preset_coq(chunk, meta_data):
         chunk,
         meta_data,
         'coqtop -q 2>&1',
-        r'^(?P<prompt>[\w\s_]* < )(?P<text>.*)$',
+        r'^(?P<prompt>\w+ < )(?P<text>.*)$',
         r'^(?P<input>.*\.) \(\*!\*\)$',
         False,
         3
@@ -419,7 +417,7 @@ def preset_coq_verbose(chunk, meta_data):
         chunk,
         meta_data,
         'coqtop -q 2>&1',
-        r'^(?P<prompt>[\w\s_]* < )(?P<text>.*)$',
+        r'^(?P<prompt>\w+ < )(?P<text>.*)$',
         r'^(?P<input>.*\.) \(\*!\*\)$',
         True,
         3
