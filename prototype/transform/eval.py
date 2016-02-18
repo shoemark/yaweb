@@ -45,6 +45,7 @@ class EvalTaskCreator(MetaDataTool):
         self.presets = {
             'R':                    preset_R,
             'R verbose':            preset_R_verbose,
+            'R unquoted':           preset_R_unquoted,
             'coq':                  preset_coq,
             'coq verbose':          preset_coq_verbose,
         }
@@ -292,61 +293,48 @@ def shell_exec_session(command, preamble, input):
 # <<DEPENDENCY 2>>
 
 
-def preset_R(chunk, meta_data):
+def _interactive_session(chunk, meta_data, command, prompt_re, echo_response_re, verbose, banner_lines=0):
     preamble, input = gather_input(chunk, meta_data)
     preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
-    ret, out, err, pre = shell_exec_session('R --vanilla --quiet --slave', preamble_t, input_t)
-    source, result = output(chunk, meta_data, [ast.Text(text=out)])
-    return [source, result]
-
-
-def preset_R_verbose(chunk, meta_data):
-    preamble, input = gather_input(chunk, meta_data)
-    preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
-    ret, out, err, pre = shell_exec_session('R --vanilla --quiet', preamble_t, input_t)
-
-    out = striphead(out, n=1, pred=lambda line: line == '> ')
-    out = striptail(out, n=1, pred=lambda line: line == '> ')
-
-    source, result = output(chunk, meta_data, [ast.Text(text=out)])
-    return [source, result]
-
-
-def _preset_coq(chunk, meta_data, verbose):
-    preamble, input = gather_input(chunk, meta_data)
-    preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
-    ret, out, err, pre = shell_exec_session('coqtop -q 2>&1', preamble_t, input_t)
+    ret, out, err, pre = shell_exec_session(command, preamble_t, input_t)
 
     Re = regex.Searcher()
-    COQ_PROMPT = '^(?P<prompt>[\w\s_]* < )(?P<text>.*)$'
-    COQ_ECHO_RESPONSE = '^(?P<input>.*\.) \(\*!\*\)$'
 
     ins = iter(input_t.split('\n'))
-    if '__next__' in dir(ins):  # python3
+    if '__next__' in dir(ins):      # python3
         ins_next = lambda: ins.__next__()
     else:                           # python2
         ins_next = lambda: ins.next()
     outs = out.split('\n')
 
-    if not preamble and len(outs) >= 4:
+    if not preamble and len(outs) >= banner_lines:
         # skip banner
-        del outs[0:3]
+        del outs[0:banner_lines]
 
     elif len(outs) >= 1:
         # skip first prompt
-        if Re.search(COQ_PROMPT, outs[0]):
+        if Re.search(prompt_re, outs[0]):
             outs[0] = Re.match.group('text')
+            if outs[0] == '':
+                del outs[0]
 
     # remove footer (blank line and prompt) to begin of this session
-    if len(outs) >= 3 and outs[-3] == '' and Re.search(COQ_PROMPT, outs[-2]):
-        del outs[-3:-1]
-
+    while len(outs) >= 1:
+        # skip last prompt
+        if outs[-1] == '':
+            del outs[-1]
+        elif Re.search(prompt_re, outs[-1]):
+            outs[-1] = Re.match.group('text')
+            if outs[-1] == '':
+                del outs[-1]
+        else:
+            break
 
     elements = []
 
     echo_response = False
     while outs:
-        while Re.search(COQ_PROMPT, outs[0]):
+        while Re.search(prompt_re, outs[0]):
             try:
                 prompt   = Re.match.group('prompt')
                 leftover = Re.match.group('text')
@@ -354,7 +342,7 @@ def _preset_coq(chunk, meta_data, verbose):
                 input_ln = ins_next()
 
                 if not verbose:
-                    if Re.search(COQ_ECHO_RESPONSE, input_ln):
+                    if Re.search(echo_response_re, input_ln):
                         echo_response = True
                         input_ln = Re.match.group('input')
                     else:
@@ -364,7 +352,11 @@ def _preset_coq(chunk, meta_data, verbose):
                     ast.InteractivePrompt(text=prompt),
                     ast.Code(text=input_ln + '\n')
                 ]
-                outs[0:0 + 1] = [leftover]
+
+                if input_ln == leftover:
+                    del outs[0]
+                else:
+                    outs[0:1] = [leftover]
 
             except StopIteration:
                 break
@@ -379,12 +371,59 @@ def _preset_coq(chunk, meta_data, verbose):
     return [source, result]
 
 
+def preset_R(chunk, meta_data):
+    return _interactive_session(
+        chunk,
+        meta_data,
+        'R --vanilla --quiet 2>&1',
+        r'^(?P<prompt>> )(?P<text>.*)$',
+        r'^(?P<input>.*) #!$',
+        False
+    )
+
+
+def preset_R_verbose(chunk, meta_data):
+    return _interactive_session(
+        chunk,
+        meta_data,
+        'R --vanilla --quiet 2>&1',
+        r'^(?P<prompt>> )(?P<text>.*)$',
+        r'^(?P<input>.*) #!$',
+        True
+    )
+
+
+def preset_R_unquoted(chunk, meta_data):
+    preamble, input = gather_input(chunk, meta_data)
+    preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
+    ret, out, err, pre = shell_exec_session('R --vanilla --quiet --slave', preamble_t, input_t)
+    source, result = output(chunk, meta_data, [ast.Text(text=out)])
+    result.set('weave', 'unquoted')
+    return [source, result]
+
+
 def preset_coq(chunk, meta_data):
-    return _preset_coq(chunk, meta_data, False)
+    return _interactive_session(
+        chunk,
+        meta_data,
+        'coqtop -q 2>&1',
+        r'^(?P<prompt>[\w\s_]* < )(?P<text>.*)$',
+        r'^(?P<input>.*\.) \(\*!\*\)$',
+        False,
+        3
+    )
 
 
 def preset_coq_verbose(chunk, meta_data):
-    return _preset_coq(chunk, meta_data, True)
+    return _interactive_session(
+        chunk,
+        meta_data,
+        'coqtop -q 2>&1',
+        r'^(?P<prompt>[\w\s_]* < )(?P<text>.*)$',
+        r'^(?P<input>.*\.) \(\*!\*\)$',
+        True,
+        3
+    )
 
 
 def scheme_shell(command, chunk, meta_data):
