@@ -1,5 +1,4 @@
 from . import ast
-from .textutils import splitlines
 
 import sys
 

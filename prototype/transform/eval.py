@@ -1,6 +1,6 @@
 from ..lib import ast
 from ..lib import regex
-from ..lib.textutils import splitlines, striphead, striptail
+from ..lib.textutils import striphead, striptail
 from ..lib.toolchain import Toolchain, ContentTool, MetaDataTool, Fence
 from ..lib.weaklist import WeakList
 
@@ -15,7 +15,7 @@ from threading import Thread
 
 # TODO:
 #   - rename to `exec'?
-#   - command error propagation, noweb file location back-resolution
+#   - command error propagation, input file location back-resolution
 #   - mapping noweb file location <-> source code file location
 
 
@@ -44,9 +44,9 @@ class EvalTaskCreator(MetaDataTool):
         )
         self.presets = {
             'R':                    preset_R,
-            'R session':            preset_R_session,
+            'R verbose':            preset_R_verbose,
             'coq':                  preset_coq,
-            'coq session':          preset_coq_session,
+            'coq verbose':          preset_coq_verbose,
         }
         self.schemes = {
             'shell':                scheme_shell
@@ -60,7 +60,7 @@ class EvalTaskCreator(MetaDataTool):
             if Re.search(r'^([a-z_][a-z_0-9]+)://(.*)$', chunk.get('eval')):
                 scheme, command = Re.match.groups()
                 if scheme in self.schemes:
-                    # TODO: permit code chunks as commands, if of the form `<<chunk_name>>'
+                    # TODO: permit code chunks as commands, if of the form `<<chunk_name>>'?
                     job = lambda chunk, meta_data: \
                             self.schemes[scheme](command, chunk, meta_data)
                 else:
@@ -273,9 +273,9 @@ def shell_exec_session(command, preamble, input):
         ret_, out_, err_ = shell_exec(command, preamble)
         ret, out, err = shell_exec(command, preamble + os.linesep + input)
 
-        lines_ = splitlines(out_)
+        lines_ = out_.split('\n')
         if len(lines_) > 1:
-            lines = splitlines(out)
+            lines = out.split('\n')
             out = os.linesep.join(lines[len(lines_) - 2:])
             pre = os.linesep.join(lines[:len(lines_) - 2])
         else:
@@ -302,7 +302,7 @@ def preset_R(chunk, meta_data):
     return [source, result]
 
 
-def preset_R_session(chunk, meta_data):
+def preset_R_verbose(chunk, meta_data):
     preamble, input = gather_input(chunk, meta_data)
     preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
     ret, out, err, pre = shell_exec_session('R --vanilla --quiet', preamble_t, input_t)
@@ -314,28 +314,21 @@ def preset_R_session(chunk, meta_data):
     return [source, result]
 
 
-def preset_coq(chunk, meta_data):
-    preamble, input = gather_input(chunk, meta_data)
-    preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
-    ret, out, err, pre = shell_exec_session('coqtop -q 2>&1', preamble_t, input_t)
-    source, result = output(chunk, meta_data, out)
-    return [source, result]
-
-
-def preset_coq_session(chunk, meta_data):
+def _preset_coq(chunk, meta_data, verbose):
     preamble, input = gather_input(chunk, meta_data)
     preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
     ret, out, err, pre = shell_exec_session('coqtop -q 2>&1', preamble_t, input_t)
 
     Re = regex.Searcher()
     COQ_PROMPT = '^(?P<prompt>[\w\s_]* < )(?P<text>.*)$'
+    COQ_ECHO_RESPONSE = '^(?P<input>.*\.) \(\*!\*\)$'
 
-    ins = iter(splitlines(input_t))
+    ins = iter(input_t.split('\n'))
     if '__next__' in dir(ins):  # python3
         ins_next = lambda: ins.__next__()
     else:                           # python2
         ins_next = lambda: ins.next()
-    outs = splitlines(out)
+    outs = out.split('\n')
 
     if not preamble and len(outs) >= 4:
         # skip banner
@@ -350,24 +343,51 @@ def preset_coq_session(chunk, meta_data):
     if len(outs) >= 3 and outs[-3] == '' and Re.search(COQ_PROMPT, outs[-2]):
         del outs[-3:-1]
 
+
+    #elements = []
+
     i = 0
+    echo_response = False
     while True:
         if i >= len(outs):
             break
+
         while Re.search(COQ_PROMPT, outs[i]):
             try:
-                outs[i:i + 1] = [
-                        Re.match.group('prompt') + ins_next(),
-                        Re.match.group('text')
-                ]
+                prompt   = Re.match.group('prompt')
+                leftover = Re.match.group('text')
+
+                input_ln = ins_next()
+
+                if not verbose:
+                    if Re.search(COQ_ECHO_RESPONSE, input_ln):
+                        echo_response = True
+                        input_ln = Re.match.group('input')
+                    else:
+                        echo_response = False
+
+                outs[i:i + 1] = [input_ln, leftover]
                 i = i + 1
+
             except StopIteration:
                 break
-        i = i + 1
+
+        if verbose or echo_response:
+            i = i + 1
+        else:
+            del outs[i]
 
     source, result = output(chunk, meta_data, os.linesep.join(outs))
 
     return [source, result]
+
+
+def preset_coq(chunk, meta_data):
+    return _preset_coq(chunk, meta_data, False)
+
+
+def preset_coq_verbose(chunk, meta_data):
+    return _preset_coq(chunk, meta_data, True)
 
 
 def scheme_shell(command, chunk, meta_data):

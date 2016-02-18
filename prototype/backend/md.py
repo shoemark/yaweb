@@ -1,6 +1,5 @@
 from ..lib import ast
 from ..lib.toolchain import SideEffectsTool
-from ..lib.textutils import splitlines
 
 import sys
 
@@ -43,9 +42,10 @@ class md(SideEffectsTool):
                     self.output.write('```\n')
 
         elif ast.is_element_type(element, ast.Text):
-            lines = splitlines(element.text)
-            text = '%s' % '\n'.join(lines)
-            self.output.write(text)
+            lines = element.text.splitlines()
+            if lines:
+                text = '%s' % '\n'.join(lines)
+                self.output.write(text)
 
         elif ast.is_element_type(element, ast.Use):
             self.output.write('<<%s>>\n' % element.get('chunk_name'))

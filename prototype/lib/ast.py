@@ -91,7 +91,6 @@ class Chunk(SyntaxElement):
         self.tag = self.__class__.__name__
 
 
-# TODO: Rename to `Textual' ?
 class Text(SyntaxElement):
     def __init__(self, attrib={}, **extra):
         super(Text, self).__init__(attrib, **extra)
@@ -258,6 +257,18 @@ class NamespaceName(CodeEntityName):
 class VariableName(CodeEntityName):
     def __init__(self, attrib={}, **extra):
         super(VariableName, self).__init__(attrib, **extra)
+        self.tag = self.__class__.__name__
+
+
+class InteractivePrompt(Code):
+    def __init__(self, attrib={}, **extra):
+        super(InteractivePrompt, self).__init__(attrib, **extra)
+        self.tag = self.__class__.__name__
+
+
+class InteractiveResponse(Code):
+    def __init__(self, attrib={}, **extra):
+        super(InteractiveResponse, self).__init__(attrib, **extra)
         self.tag = self.__class__.__name__
 
 

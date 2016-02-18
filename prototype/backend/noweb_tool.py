@@ -1,6 +1,7 @@
 from ..lib import ast
 from ..lib.toolchain import SideEffectsTool
-from ..lib.textutils import splitlines
+
+import sys
 
 
 class noweb_tool(SideEffectsTool):
@@ -50,18 +51,33 @@ class noweb_tool(SideEffectsTool):
                 self.chunk_id += 1
 
         elif ast.is_element_type(element, ast.QuotedText):
-                lines = splitlines(element.text)
-                text = '@quote\n@text %s\n@endquote\n' % '\n@nl\n@text '.join(lines)
+                lines = element.text.split('\n')
+                text = ['@text %s\n' % line for line in lines[:-1]]
+                if lines[-1]:
+                    text += ['@text %s\n' % lines[-1]]
+                else:
+                    text += ['']
+                text = '@quote\n%s@endquote\n' % '@nl\n'.join(text)
                 self.output.write(text)
 
         elif ast.is_element_type(element, ast.Text):
             if element.get('pretty_latex') is not None and self.tangle is False:
-                lines = splitlines(element.get('pretty_latex'))
-                text = '@literal %s\n' % '\n@nl\n@literal '.join(lines)
+                lines = element.get('pretty_latex').split('\n')
+                text = ['@literal %s\n' % line for line in lines[:-1]]
+                if lines[-1]:
+                    text += ['@literal %s\n' % lines[-1]]
+                else:
+                    text += ['']
+                text = '@nl\n'.join(text)
                 self.output.write(text)
             else:
-                lines = splitlines(element.text)
-                text = '@text %s\n' % '\n@nl\n@text '.join(lines)
+                lines = element.text.split('\n')
+                text = ['@text %s\n' % line for line in lines[:-1]]
+                if lines[-1]:
+                    text += ['@text %s\n' % lines[-1]]
+                else:
+                    text += ['']
+                text = '@nl\n'.join(text)
                 self.output.write(text)
 
         elif ast.is_element_type(element, ast.Use):

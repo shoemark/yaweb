@@ -2,12 +2,8 @@ import os
 import re
 
 
-def splitlines(string):
-    return string.split('\n')
-
-
 def striphead(string, n=0, pred=lambda line: True):
-    lines = splitlines(string)
+    lines = string.split('\n')
     if n < 0:
         n = len(lines) - 1
     for i in range(min(n, len(lines) - 1), 0, -1):
@@ -17,7 +13,7 @@ def striphead(string, n=0, pred=lambda line: True):
 
 
 def striptail(string, n=0, pred=lambda line: True):
-    lines = splitlines(string)
+    lines = string.split('\n')
     if n < 0:
         n = len(lines) - 1
     for i in range(len(lines) - 1, max(len(lines) - 1 - n, 0), -1):
