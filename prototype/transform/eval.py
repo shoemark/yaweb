@@ -168,10 +168,10 @@ def tangle_input(chunk, meta_data, preamble, input):
     return preamble_t, input_t
 
 
-def output(chunk, meta_data, text):
+def output(chunk, meta_data, elements):
     src_chunk = chunk #ast.clone(chunk)
 
-    out_chunk = ast.Chunk()
+    out_chunk = ast.Chunk(children=elements)
     out_chunk.set('weave', 'quoted')
 
     inherited_props = ['chunk_name']
@@ -182,8 +182,6 @@ def output(chunk, meta_data, text):
     for prop in src_chunk.attrib:
         if prop.startswith('out_'):
             out_chunk.set(prop[4:], src_chunk.get(prop))
-
-    out_chunk.append(ast.Text(text=text))
 
     return src_chunk, out_chunk
 
@@ -298,7 +296,7 @@ def preset_R(chunk, meta_data):
     preamble, input = gather_input(chunk, meta_data)
     preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
     ret, out, err, pre = shell_exec_session('R --vanilla --quiet --slave', preamble_t, input_t)
-    source, result = output(chunk, meta_data, out)
+    source, result = output(chunk, meta_data, [ast.Text(text=out)])
     return [source, result]
 
 
@@ -310,7 +308,7 @@ def preset_R_verbose(chunk, meta_data):
     out = striphead(out, n=1, pred=lambda line: line == '> ')
     out = striptail(out, n=1, pred=lambda line: line == '> ')
 
-    source, result = output(chunk, meta_data, out)
+    source, result = output(chunk, meta_data, [ast.Text(text=out)])
     return [source, result]
 
 
@@ -344,15 +342,11 @@ def _preset_coq(chunk, meta_data, verbose):
         del outs[-3:-1]
 
 
-    #elements = []
+    elements = []
 
-    i = 0
     echo_response = False
-    while True:
-        if i >= len(outs):
-            break
-
-        while Re.search(COQ_PROMPT, outs[i]):
+    while outs:
+        while Re.search(COQ_PROMPT, outs[0]):
             try:
                 prompt   = Re.match.group('prompt')
                 leftover = Re.match.group('text')
@@ -366,18 +360,21 @@ def _preset_coq(chunk, meta_data, verbose):
                     else:
                         echo_response = False
 
-                outs[i:i + 1] = [input_ln, leftover]
-                i = i + 1
+                elements += [
+                    ast.InteractivePrompt(text=prompt),
+                    ast.Code(text=input_ln + '\n')
+                ]
+                outs[0:0 + 1] = [leftover]
 
             except StopIteration:
                 break
 
         if verbose or echo_response:
-            i = i + 1
-        else:
-            del outs[i]
+            elements.append(ast.InteractiveResponse(text=(outs[0] + '\n')))
 
-    source, result = output(chunk, meta_data, os.linesep.join(outs))
+        del outs[0]
+
+    source, result = output(chunk, meta_data, elements)
 
     return [source, result]
 
@@ -394,7 +391,7 @@ def scheme_shell(command, chunk, meta_data):
     preamble, input = gather_input(chunk, meta_data)
     preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
     ret, out, err, pre = shell_exec_session(command, preamble_t, input_t)
-    source, result = output(chunk, meta_data, out)
+    source, result = output(chunk, meta_data, [ast.Text(text=out)])
     return [source, result]
 
 

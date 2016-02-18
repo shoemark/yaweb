@@ -14,15 +14,17 @@ class CodeLexer(ContentTool):
     def process_chunk(self, chunk, meta_data):
         lang = chunk.get('lang')
         if chunk.get('weave') == 'quoted' and lang:
-            yaweb = meta_data['yaweb']
-            elements = yaweb.merge_text_elements(list(chunk))
+            #yaweb = meta_data['yaweb']
+            #elements = yaweb.merge_text_elements(list(chunk))
+            elements = list(chunk)
 
             result = ast.clone(chunk)
             for element in list(result):
                 result.remove(element)
 
             for element in elements:
-                if ast.is_element_type(element, ast.Text):
+                #if ast.is_element_type(element, ast.Text):
+                if element.tag == 'Text' or element.tag == 'Code':
                     try:
                         for e in _lex_pygments(lang, element):
                             result.append(e)
