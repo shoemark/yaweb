@@ -7,6 +7,7 @@ from ..lib.weaklist import WeakList
 import sys
 import os
 import os.path
+import re
 import subprocess
 import hashlib
 from weakref import WeakKeyDictionary
@@ -293,7 +294,7 @@ def shell_exec_session(command, preamble, input):
 # <<DEPENDENCY 2>>
 
 
-def _interactive_session(chunk, meta_data, command, prompt_re, echo_response_re, verbose, banner_lines=0):
+def _interactive_session(chunk, meta_data, command, prompt_re, phrase_re, echo_response_re=r'^.*$', banner_lines=0):
     preamble, input = gather_input(chunk, meta_data)
     preamble_t, input_t = tangle_input(chunk, meta_data, preamble, input)
     ret, out, err, pre = shell_exec_session(command, preamble_t, input_t)
@@ -310,59 +311,93 @@ def _interactive_session(chunk, meta_data, command, prompt_re, echo_response_re,
     if not preamble and len(outs) >= banner_lines:
         # skip banner
         del outs[0:banner_lines]
-    elif len(outs) >= 1:
-        # skip leading prompt
+    else:
+        # skip first prompt
         if Re.search(prompt_re, outs[0]):
-            outs[0] = Re.match.group('text')
+            outs[0] = Re.match.group('prtail')
             if outs[0] == '':
                 del outs[0]
-
-    elements = []
-
-    echo_response = False
-    while outs:
-        while Re.search(prompt_re, outs[0]):
-            try:
-                prompt   = Re.match.group('prompt')
-                leftover = Re.match.group('text')
-
-                input_ln = ins_next()
-
-                if not verbose:
-                    if Re.search(echo_response_re, input_ln):
-                        echo_response = True
-                        input_ln = Re.match.group('input')
-                    else:
-                        echo_response = False
-
-                elements += [
-                    ast.InteractivePrompt(text=prompt),
-                    ast.Code(text='%s\n' % input_ln)
-                ]
-
-                if input_ln == leftover:
-                    del outs[0]
-                else:
-                    outs[0:1] = [leftover]
-
-            except StopIteration:
-                break
-
-        if verbose or echo_response:
-            elements.append(ast.InteractiveResponse(text=(outs[0] + '\n')))
-
-        del outs[0]
 
     # remove trailing blank lines and prompts
     while len(outs) >= 1:
         if outs[-1] == '':
             del outs[-1]
         elif Re.search(prompt_re, outs[-1]):
-            outs[-1] = Re.match.group('text')
+            outs[-1] = Re.match.group('prtail')
             if outs[-1] == '':
                 del outs[-1]
         else:
             break
+
+    phrase        = ''     # input phrase
+    elements      = []     # output AST elements
+    skip_prompts  = 0      # number of prompts to skip
+    echo_response = False  # whether to print the response
+
+    sys.stderr.write('%r\n' % outs)
+
+    while outs:
+        while Re.search(prompt_re, outs[0]):
+            try:
+                prompt = Re.match.group('prompt')
+                prtail = Re.match.group('prtail')
+
+                if skip_prompts:
+                    outs[0] = prtail
+                    skip_prompts -= 1
+                    continue
+
+                if phrase_re is not None:
+                    phrase += ins_next() + '\n'
+                    while not Re.search(phrase_re, phrase, re.DOTALL):
+                        phrase_add = ins_next()
+                        phrase += phrase_add + '\n'
+                        skip_prompts += 1
+
+                    phrase = Re.match.group('phrase')
+                    phtail = Re.match.group('phtail')
+                elif prtail is '':
+                    # remove lines containing just a prompt and no phrase
+                    del outs[0]
+                    continue
+                else:
+                    phrase = prtail
+                    phtail = ''
+                    prtail = ''
+
+                if Re.search(echo_response_re, phrase, re.DOTALL):
+                    echo_response = True
+                    phrase = Re.match.group('phrase') + Re.match.group('phrasE')
+                else:
+                    echo_response = False
+
+                elements += [
+                    ast.InteractivePrompt(text=prompt),
+                    ast.Code(text=phrase)
+                ]
+
+                #if phrase + '\n' == prtail:
+                #    del outs[0]
+                #else:
+                outs[0:1] = [prtail]
+
+                sys.stderr.write('%r\n' % dict(
+                    prompt=prompt,
+                    prtail=prtail,
+                    phrase=phrase,
+                    phtail=phtail
+                ))
+
+                phrase = phtail
+
+            except StopIteration:
+                break
+
+        sys.stderr.write('out=%r\n' % (outs[0] + '\n'))
+        if echo_response:
+            elements.append(ast.InteractiveResponse(text=(outs[0] + '\n')))
+
+        del outs[0]
 
     source, result = output(chunk, meta_data, elements)
 
@@ -373,10 +408,10 @@ def preset_R(chunk, meta_data):
     return _interactive_session(
         chunk,
         meta_data,
-        'R --vanilla --quiet 2>&1',
-        r'^(?P<prompt>> )(?P<text>.*)$',
-        r'^(?P<input>.*) #!$',
-        False
+        'R --vanilla --quiet 2>/dev/null',
+        r'^(?P<prompt>[>+] )(?P<prtail>.*)$',
+        None,
+        r'^(?P<phrase>.*)\s*(?P<phrasE>)#!\Z'
     )
 
 
@@ -384,10 +419,10 @@ def preset_R_verbose(chunk, meta_data):
     return _interactive_session(
         chunk,
         meta_data,
-        'R --vanilla --quiet 2>&1',
-        r'^(?P<prompt>> )(?P<text>.*)$',
-        r'^(?P<input>.*) #!$',
-        True
+        'R --vanilla --quiet 2>/dev/null',
+        r'^(?P<prompt>[>+] )(?P<prtail>.*)$',
+        None,
+        r'^(?P<phrase>.*)(?P<phrasE>)\Z'
     )
 
 
@@ -405,9 +440,9 @@ def preset_coq(chunk, meta_data):
         chunk,
         meta_data,
         'coqtop -q 2>&1',
-        r'^(?P<prompt>\w+ < )(?P<text>.*)$',
-        r'^(?P<input>.*\.) \(\*!\*\)$',
-        False,
+        r'^(?P<prompt>\w+ < )(?P<prtail>.*)$',
+        r'^(?P<phrase>\s*$|[^.]+\.\s*)(?P<phtail>.*)\Z',
+        r'^(?P<phrase>.*)\(\*!\*\)(?P<phrasE>\.\s*)\Z',
         3
     )
 
@@ -417,9 +452,9 @@ def preset_coq_verbose(chunk, meta_data):
         chunk,
         meta_data,
         'coqtop -q 2>&1',
-        r'^(?P<prompt>\w+ < )(?P<text>.*)$',
-        r'^(?P<input>.*\.) \(\*!\*\)$',
-        True,
+        r'^(?P<prompt>\w+ < )(?P<prtail>.*)$',
+        r'^(?P<phrase>\s*$|[^.]+\.\s*)(?P<phtail>.*)\Z',
+        r'^(?P<phrase>.*)(?P<phrasE>)\Z',
         3
     )
 
