@@ -334,7 +334,7 @@ def _interactive_session(chunk, meta_data, command, prompt_re, phrase_re, echo_r
     skip_prompts  = 0      # number of prompts to skip
     echo_response = False  # whether to print the response
 
-    sys.stderr.write('%r\n' % outs)
+    #sys.stderr.write('%r\n' % outs)
 
     while outs:
         while Re.search(prompt_re, outs[0]):
@@ -381,21 +381,24 @@ def _interactive_session(chunk, meta_data, command, prompt_re, phrase_re, echo_r
                 #else:
                 outs[0:1] = [prtail]
 
-                sys.stderr.write('%r\n' % dict(
-                    prompt=prompt,
-                    prtail=prtail,
-                    phrase=phrase,
-                    phtail=phtail
-                ))
+                #sys.stderr.write('%r\n' % dict(
+                #    prompt=prompt,
+                #    prtail=prtail,
+                #    phrase=phrase,
+                #    phtail=phtail
+                #))
 
                 phrase = phtail
 
             except StopIteration:
                 break
 
-        sys.stderr.write('out=%r\n' % (outs[0] + '\n'))
+        #sys.stderr.write('out=%r\n' % (outs[0] + '\n'))
         if echo_response:
-            elements.append(ast.InteractiveResponse(text=(outs[0] + '\n')))
+            if ast.is_element_type(elements[-1], ast.InteractiveResponse):
+                elements[-1].text += outs[0] + '\n'
+            else:
+                elements.append(ast.InteractiveResponse(text=(outs[0] + '\n')))
 
         del outs[0]
 
