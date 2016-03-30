@@ -3,6 +3,7 @@ from ..lib import regex
 from ..lib.textutils import striphead, striptail
 from ..lib.toolchain import Toolchain, ContentTool, MetaDataTool, Fence
 from ..lib.weaklist import WeakList
+from .xref_use import xref_use
 
 import sys
 import os
@@ -472,6 +473,8 @@ def scheme_shell(command, chunk, meta_data):
 
 def eval(*args, **kwargs):
     return Toolchain([
+        xref_use(),
+        Fence(),
         ChunksByEvalSession(),
         EvalTaskCreator(),
         Fence(),
