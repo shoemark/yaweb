@@ -37,7 +37,7 @@ class noweb_tool(SideEffectsTool):
                 else:
                     self.output.write('@begin code %s\n' % str(self.chunk_id))
                     name = element.get('chunk_name')
-                    if name and element.get('quiet') is not None:
+                    if name and element.get('quiet') is None or element.get('quiet') is False:
                         self.output.write('@defn %s\n@nl\n' % str(name))
 
                 for text in element:
