@@ -2,6 +2,7 @@ from ..lib import ast
 from ..lib.toolchain import ContentTool
 
 import sys
+import re
 import pygments
 import pygments.lexers
 from pygments.token import Token
@@ -25,6 +26,14 @@ class CodeLexer(ContentTool):
             for element in elements:
                 #if ast.is_element_type(element, ast.Text):
                 if element.tag == 'Text' or element.tag == 'Code':
+
+                    # Pygments appearantly strips line breaks at the beginning,
+                    # so save leading white space
+                    match = re.search(r'^(?P<white>\s*)(?P<text>|\S.*)$', element.text, re.MULTILINE)
+                    if match.group('white') is not '':
+                        result.append(ast.Text(text=match.group('white')))
+                        element.text = match.group('text')
+
                     try:
                         for e in _lex_pygments(lang, element):
                             result.append(e)

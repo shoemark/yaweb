@@ -23,7 +23,7 @@ def tangle(chunk, meta_data):
             i = i + 1
 
         if any([ast.is_element_type(e, ast.Use) for e in elements]):
-            return tangle_elements(elements)
+            return tangle_elements(elements, meta_data)
         else:
             return elements
 

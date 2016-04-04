@@ -8,7 +8,6 @@ from .lib import ast
 from .lib import toolchain
 #from .lib import toolchain_debug
 from .lib.args import parse_args
-from .transform.meta import meta
 
 import sys
 import imp
@@ -30,23 +29,26 @@ class Yaweb(object):
         default_bootstrap = [
             ('meta', [], {})
         ]
-        bootstrap  = kwargs.setdefault('bootstrap', default_bootstrap)
-        del kwargs['bootstrap']
-
-        default_frontends = [] # TODO
-        frontend  = kwargs.setdefault('frontend', default_frontends)
-        del kwargs['frontend']
-
+        default_frontends = [ # TODO
+        ]
         default_transforms = [
             ('eval', [], {}),
             ('tags', [], {}),
             ('lex_code', [], {}),
             ('pretty', [], {}),
         ]
+        default_backends = [ # TODO
+        ]
+
+        bootstrap  = kwargs.setdefault('bootstrap', default_bootstrap)
+        del kwargs['bootstrap']
+
+        frontend  = kwargs.setdefault('frontend', default_frontends)
+        del kwargs['frontend']
+
         transform = kwargs.setdefault('transform', default_transforms)
         del kwargs['transform']
 
-        default_backends = [] # TODO
         backend = kwargs.setdefault('backend', default_backends)
         del kwargs['backend']
 
@@ -107,12 +109,11 @@ class Yaweb(object):
         chunks_out, meta_data_out = main_tools.pipe(chunks_pre, meta_data_pre)
 
         if self.backends:
-            #web = ast.Web(children=chunks_out)
-            #print(repr(web))
-            #print(meta_data)
+            # process chunks (pull them through the pipeline)
             for chunk in chunks_out:
                 pass
         else:
+            # process and return chunks
             return ast.Web(children=list(chunks_out))
 
 

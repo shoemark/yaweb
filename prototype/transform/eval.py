@@ -1,6 +1,6 @@
 from ..lib import ast
 from ..lib import regex
-from ..lib.textutils import striphead, striptail
+#from ..lib.textutils import striphead, striptail
 from ..lib.toolchain import Toolchain, ContentTool, MetaDataTool, Fence
 from ..lib.weaklist import WeakList
 from .xref_use import xref_use
