@@ -29,15 +29,16 @@ class CodeLexer(ContentTool):
 
                     # Pygments appearantly strips line breaks at the beginning,
                     # so save leading white space
-                    match = re.search(r'^(?P<white>\s*)(?P<text>|\S.*)$', element.text, re.MULTILINE)
-                    if match.group('white') is not '':
-                        result.append(ast.Text(text=match.group('white')))
-                        element.text = match.group('text')
+                    #match = re.search(r'^(?P<white>\s*)(?P<text>|\S.*)$', element.text, re.MULTILINE)
+                    #if match.group('white') is not '':
+                    #    result.append(ast.Text(text=match.group('white')))
+                    #    element.text = match.group('text')
 
                     try:
                         for e in _lex_pygments(lang, element):
                             result.append(e)
-                    except:
+                    except Exception as error:
+                        sys.stderr.write('failed to lexically analyse element: %s\n' % str(error))
                         result.append(element)
                 else:
                     result.append(element)
@@ -49,6 +50,7 @@ class CodeLexer(ContentTool):
 
 
 def _lex_pygments(lang, element):
+    #lexer = pygments.lexers.get_lexer_by_name(lang, encoding='utf-8', outencoding='utf-8')
     lexer = pygments.lexers.get_lexer_by_name(lang)
 
     result = []
@@ -110,6 +112,9 @@ def _lex_pygments(lang, element):
             result.append(ast.Literal(text=text))
 
         elif pygments.token.is_token_subtype(token, Token.Text):
+            result.append(ast.Text(text=text))
+
+        elif pygments.token.is_token_subtype(token, Token.Error):
             result.append(ast.Text(text=text))
 
         else:
