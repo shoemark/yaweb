@@ -32,6 +32,7 @@ class Yaweb(object):
         default_frontends = [ # TODO
         ]
         default_transforms = [
+            ('cont', [], {}),
             ('eval', [], {}),
             ('tags', [], {}),
             ('lex_code', [], {}),
