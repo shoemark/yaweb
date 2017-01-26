@@ -111,11 +111,12 @@ def _lex_pygments(lang, element):
         elif pygments.token.is_token_subtype(token, Token.Literal):
             result.append(ast.Literal(text=text))
 
-        elif pygments.token.is_token_subtype(token, Token.Text):
-            result.append(ast.Text(text=text))
-
-        elif pygments.token.is_token_subtype(token, Token.Error):
-            result.append(ast.Text(text=text))
+        elif pygments.token.is_token_subtype(token, Token.Text) \
+                or pygments.token.is_token_subtype(token, Token.Error):
+            lines = text.split('\n')
+            for line in lines[:-1]:
+                result.append(ast.Text(text=line + '\n'))
+            result.append(ast.Text(text=lines[-1]))
 
         else:
             sys.stderr.write('lex_code: unhandled token %s=%s\n' % (str(token), text))
