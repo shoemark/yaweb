@@ -1,5 +1,5 @@
-from ..lib import ast
 from ..lib.toolchain import SideEffectsTool
+from ..lib.noweb_tool import *
 
 import sys
 
@@ -19,66 +19,68 @@ class noweb_tool(SideEffectsTool):
     def process_chunk(self, chunk, meta_data):
         self._format(chunk)
 
-    def _format(self, element):
-        if ast.is_element_type(element, ast.Web):
-            for chunk in element:
-                self._format(chunk)
+    def _format(self, chunk):
+        if self.tangle or chunk.get('weave') is not False:
+            tokens = []
 
-        elif ast.is_element_type(element, ast.Chunk):
-            if element.get('weave') is not False:
-                source_file = element.get('source_file')
-                if source_file:
-                    if source_file != self.source_file:
-                        self.output.write('@file %s\n' % source_file)
-                        self.source_file = source_file
+            source_file = chunk.get('source_file')
+            if source_file and source_file != self.source_file:
+                tokens.append(FileToken(source_file))
+                self.source_file = source_file
 
-                if element.get('weave') == 'unquoted':
-                    self.output.write('@begin docs %s\n' % str(self.chunk_id))
-                else:
-                    self.output.write('@begin code %s\n' % str(self.chunk_id))
-                    name = element.get('chunk_name')
-                    quiet = element.get('quiet')
-                    self.output.write('@defn %s\n@nl\n' % str(name))
-
-                for text in element:
-                    self._format(text)
-
-                if element.get('weave') == 'unquoted':
-                    self.output.write('@end docs %s\n' % str(self.chunk_id))
-                else:
-                    self.output.write('@end code %s\n' % str(self.chunk_id))
-
-                self.chunk_id += 1
-
-        elif ast.is_element_type(element, ast.QuotedText):
-                lines = element.text.split('\n')
-                text = ['@text %s\n' % line for line in lines[:-1]]
-                if lines[-1]:
-                    text += ['@text %s\n' % lines[-1]]
-                else:
-                    text += ['']
-                text = '@quote\n%s@endquote\n' % '@nl\n'.join(text)
-                self.output.write(text)
-
-        elif ast.is_element_type(element, ast.Text):
-            if element.get('pretty_latex') is not None and self.tangle is False:
-                lines = element.get('pretty_latex').split('\n')
-                text = ['@literal %s\n' % line for line in lines[:-1]]
-                if lines[-1]:
-                    text += ['@literal %s\n' % lines[-1]]
-                else:
-                    text += ['']
-                text = '@nl\n'.join(text)
-                self.output.write(text)
+            if chunk.get('weave') == 'unquoted':
+                tokens.append(BeginDocsToken(self.chunk_id))
             else:
-                lines = element.text.split('\n')
-                text = ['@text %s\n' % line for line in lines[:-1]]
-                if lines[-1]:
-                    text += ['@text %s\n' % lines[-1]]
-                else:
-                    text += ['']
-                text = '@nl\n'.join(text)
-                self.output.write(text)
+                tokens.append(BeginCodeToken(self.chunk_id))
+                tokens.append(DefnToken(chunk.get('chunk_name')))
+                tokens.append(NewlineToken())
 
-        elif ast.is_element_type(element, ast.Use):
-            self.output.write('@use %s\n' % element.get('chunk_name'))
+            for element in chunk:
+                if ast.is_element_type(element, ast.Use):
+                    tokens.append(UseToken(element.get('chunk_name')))
+
+                elif ast.is_element_type(element, ast.QuotedText):
+                    tokens.append(BeginQuoteToken())
+
+                    if not self.tangle and element.get('pretty_latex'):
+                        lines = element.get('pretty_latex').split('\n')
+                        token = LiteralToken
+                    else:
+                        lines = element.text.split('\n')
+                        token = TextToken
+
+                    if lines:
+                        for line in lines[:-1]:
+                            tokens.append(token(line))
+                            tokens.append(NewlineToken())
+                        tokens.append(token(lines[-1]))
+
+                    tokens.append(EndQuoteToken())
+
+                elif ast.is_element_type(element, ast.Text) and not ast.is_element_type(element, ast.QuotedText):
+                    if not self.tangle and element.get('pretty_latex'):
+                        lines = element.get('pretty_latex').split('\n')
+                        token = LiteralToken
+                    else:
+                        lines = element.text.split('\n')
+                        token = TextToken
+
+                    if lines:
+                        for line in lines[:-1]:
+                            tokens.append(token(line))
+                            tokens.append(NewlineToken())
+                        tokens.append(token(lines[-1]))
+
+            # remove empty text tokens at the end
+            while (isinstance(tokens[-1], TextToken) or isinstance(tokens[-1], LiteralToken)) \
+                    and not tokens[-1].text:
+                del tokens[-1]
+
+            if chunk.get('weave') == 'unquoted':
+                tokens.append(EndDocsToken(self.chunk_id))
+            else:
+                tokens.append(EndCodeToken(self.chunk_id))
+            self.chunk_id += 1
+
+            tokens = simplify(tokens)
+            self.output.write('\n'.join([str(token) for token in tokens]) + '\n')
