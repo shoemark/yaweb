@@ -28,14 +28,14 @@ class CodeLexer(ContentTool):
                 if element.tag == 'Text' or element.tag == 'Code':
 
                     # Pygments appearantly strips line breaks at the beginning,
-                    # so save leading white space
-                    #match = re.search(r'^(?P<white>\s*)(?P<text>|\S.*)$', element.text, re.MULTILINE)
-                    #if match.group('white') is not '':
-                    #    result.append(ast.Text(text=match.group('white')))
-                    #    element.text = match.group('text')
+                    # so save leading white space (for example, after a Use token)
+                    match = re.search(r'^(?P<white>\s*)(?P<text>|\S.*)$', element.text)
+                    if match and match.group('white') is not '':
+                        result.append(ast.Text(text=match.group('white')))
+                        element.text = match.group('text')
 
                     try:
-                        for e in _lex_pygments(lang, element):
+                        for e in _lex_pygments(lang, chunk, element):
                             result.append(e)
                     except Exception as error:
                         sys.stderr.write('failed to lexically analyse element: %s\n' % str(error))
@@ -49,7 +49,7 @@ class CodeLexer(ContentTool):
             return chunk
 
 
-def _lex_pygments(lang, element):
+def _lex_pygments(lang, chunk, element):
     #lexer = pygments.lexers.get_lexer_by_name(lang, encoding='utf-8', outencoding='utf-8')
     lexer = pygments.lexers.get_lexer_by_name(lang)
 
@@ -116,13 +116,15 @@ def _lex_pygments(lang, element):
             lines = text.split('\n')
             for line in lines[:-1]:
                 result.append(ast.Text(text=line + '\n'))
-            result.append(ast.Text(text=lines[-1]))
+            if lines[-1]:
+                result.append(ast.Text(text=lines[-1]))
 
         else:
             sys.stderr.write('lex_code: unhandled token %s=%s\n' % (str(token), text))
 
-    if not element.text.endswith('\n') and result[-1].text == u'\n':
-        del result[-1]
+    # Pygments always terminates lines, even if the original line was not terminated.
+    if not element.text.endswith('\n') and result and result[-1].text.endswith(u'\n'):
+        result[-1].text = result[-1].text[:-1]
 
     return result
 
