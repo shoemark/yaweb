@@ -35,7 +35,7 @@ class Yaweb(object):
             ('cont', [], {}),
             ('eval', [], {}),
             ('tags', [], {}),
-            ('lex_code', [], {}),
+            ('lex', [], {}),
             ('pretty', [], {}),
         ]
         default_backends = [ # TODO
