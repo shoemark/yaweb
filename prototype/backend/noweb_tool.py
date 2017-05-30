@@ -32,12 +32,20 @@ class noweb_tool(SideEffectsTool):
                 tokens.append(BeginDocsToken(self.chunk_id))
             else:
                 tokens.append(BeginCodeToken(self.chunk_id))
-                tokens.append(DefnToken(chunk.get('chunk_name')))
+                if not self.tangle and chunk.get('chunk_name_alias'):
+                    chunk_name = chunk.get('chunk_name_alias')
+                else:
+                    chunk_name = chunk.get('chunk_name')
+                tokens.append(DefnToken(chunk_name))
                 tokens.append(NewlineToken())
 
             for element in chunk:
                 if ast.is_element_type(element, ast.Use):
-                    tokens.append(UseToken(element.get('chunk_name')))
+                    if not self.tangle and element.get('chunk_name_alias'):
+                        chunk_name = element.get('chunk_name_alias')
+                    else:
+                        chunk_name = element.get('chunk_name')
+                    tokens.append(UseToken(chunk_name))
 
                 elif ast.is_element_type(element, ast.QuotedText):
                     tokens.append(BeginQuoteToken())
