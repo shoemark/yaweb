@@ -34,8 +34,10 @@ class noweb_tool(SideEffectsTool):
                 tokens.append(BeginCodeToken(self.chunk_id))
                 if not self.tangle and chunk.get('chunk_name_alias'):
                     chunk_name = chunk.get('chunk_name_alias')
-                else:
+                elif chunk.get('chunk_name'):
                     chunk_name = chunk.get('chunk_name')
+                else:
+                    chunk_name = ''
                 tokens.append(DefnToken(chunk_name))
                 tokens.append(NewlineToken())
 

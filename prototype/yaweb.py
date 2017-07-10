@@ -42,10 +42,10 @@ class Yaweb(object):
         default_backends = [ # TODO
         ]
 
-        bootstrap  = kwargs.setdefault('bootstrap', default_bootstrap)
+        bootstrap = kwargs.setdefault('bootstrap', default_bootstrap)
         del kwargs['bootstrap']
 
-        frontend  = kwargs.setdefault('frontend', default_frontends)
+        frontend = kwargs.setdefault('frontend', default_frontends)
         del kwargs['frontend']
 
         transform = kwargs.setdefault('transform', default_transforms)
@@ -74,7 +74,7 @@ class Yaweb(object):
         try:
             name, l_args, l_kwargs = desc
 
-            args = l_args
+            args = [*g_args] + l_args
 
             kwargs = {}
             kwargs.update(g_kwargs)
@@ -91,7 +91,7 @@ class Yaweb(object):
                 __package__
             )
 
-            return module.__dict__[class_name](**kwargs)
+            return module.__dict__[class_name](*args, **kwargs)
         finally:
                 pass
 
